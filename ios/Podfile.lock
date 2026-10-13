@@ -1,0 +1,22 @@
+PODS:
+  - ai_gallery_native (0.2.0):
+    - Flutter
+  - Flutter (1.0.0)
+
+DEPENDENCIES:
+  - ai_gallery_native (from `.symlinks/plugins/ai_gallery_native/ios`)
+  - Flutter (from `Flutter`)
+
+EXTERNAL SOURCES:
+  ai_gallery_native:
+    :path: ".symlinks/plugins/ai_gallery_native/ios"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  ai_gallery_native: 4518314cf60b8566890dd203790c99c75260f1aa
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+
+PODFILE CHECKSUM: 53a6aebc29ccee84c41f92f409fc20cd4ca011f1
+
+COCOAPODS: 1.17.0

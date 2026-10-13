@@ -1,0 +1,11 @@
+{
+  "name": "embeddinggemma-2-740m",
+  "sha256": "e7a8a2204b91e0f96e92960e84a09a89212e1633dcb7575a9bf3378b4df77f4c",
+  "size": 484622336,
+  "source": "https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm",
+  "schemaVersion": 1,
+  "modelVersion": "embeddinggemma-2-256-v1",
+  "url": "https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm/resolve/main/embeddinggemma-2-740m.litertlm",
+  "dimensions": 256,
+  "visionTokens": 70
+}

@@ -1,0 +1,26 @@
+name: ai_gallery
+description: Cross-platform AI Gallery with Flutter UI and native photo/model adapters.
+publish_to: "none"
+version: 0.4.0+4
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.6
+  shorebird_code_push: ^2.0.7
+  ai_gallery_native:
+    path: packages/ai_gallery_native
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/model-manifest.json
+    - shorebird.yaml
