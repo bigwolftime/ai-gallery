@@ -1,6 +1,6 @@
 # 早期 Android 分发渠道（2026-10-20）
 
-用户目前仅本人测试，因此暂缓 F-Droid 主仓库与 Google Play 首次正式发布，转向低门槛渠道。已确认的 Apache-2.0、正式 Android ID net.zonheng.aigallery、隐私与许可页面、独立商店构建准备保留；未提交任何商店申请。
+用户目前仅本人测试，因此暂缓 F-Droid 主仓库与 Google Play 首次正式发布，转向低门槛渠道。已采用 Apache-2.0 与正式 Android ID net.zonheng.aigallery，发布 0.4.5 Beta 1，并提交 Uptodown、OpenAPK，等待编辑审核。F-Droid / Play 尚未提交。发布回执见 [Beta 发布记录](releases/0.4.5-beta.1-publishing.md)。
 
 | 渠道 | 定位 | 当前适配情况 |
 | --- | --- | --- |
