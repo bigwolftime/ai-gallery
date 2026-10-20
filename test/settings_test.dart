@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'gallery_test.dart' show FakeNative, FakeService;
-import 'ota_test.dart' show FakeOtaGateway;
+import 'ota_test.dart' show FakeOtaGateway, FakeReleaseGateway;
 
 class MemorySettingsStore implements SettingsStore {
   ThemeMode saved = ThemeMode.system;
@@ -93,7 +93,8 @@ void main() {
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     final store = MemorySettingsStore();
     final settings = AppSettingsController(store: store);
-    final ota = OtaController(gateway: FakeOtaGateway());
+    final ota = OtaController(
+        releases: FakeReleaseGateway(), gateway: FakeOtaGateway());
     addTearDown(settings.dispose);
     addTearDown(ota.dispose);
     await mountApp(tester, settings: settings, ota: ota);
@@ -135,7 +136,8 @@ void main() {
       (tester) async {
     final store = MemorySettingsStore()..saved = ThemeMode.dark;
     final settings = AppSettingsController(store: store);
-    final ota = OtaController(gateway: FakeOtaGateway());
+    final ota = OtaController(
+        releases: FakeReleaseGateway(), gateway: FakeOtaGateway());
     addTearDown(settings.dispose);
     addTearDown(ota.dispose);
     await mountApp(tester, settings: settings, ota: ota);
@@ -151,7 +153,8 @@ void main() {
     native.indexed.addAll(native.photos.take(20).map((photo) => photo.id));
     final gallery = GalleryController(service: FakeService(native: native));
     final settings = AppSettingsController(store: MemorySettingsStore());
-    final ota = OtaController(gateway: FakeOtaGateway());
+    final ota = OtaController(
+        releases: FakeReleaseGateway(), gateway: FakeOtaGateway());
     addTearDown(gallery.dispose);
     addTearDown(settings.dispose);
     addTearDown(ota.dispose);
@@ -186,7 +189,7 @@ void main() {
   testWidgets('up-to-date check stays in settings without opening a dialog',
       (tester) async {
     final gateway = FakeOtaGateway();
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     final settings = AppSettingsController(store: MemorySettingsStore());
     addTearDown(settings.dispose);
     addTearDown(ota.dispose);
@@ -212,7 +215,8 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final gateway = FakeOtaGateway()..status = UpdateStatus.outdated;
-      final ota = OtaController(gateway: gateway);
+      final ota =
+          OtaController(releases: FakeReleaseGateway(), gateway: gateway);
       final store = MemorySettingsStore()..saved = mode;
       final settings = AppSettingsController(store: store);
       addTearDown(settings.dispose);

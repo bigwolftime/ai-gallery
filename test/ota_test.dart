@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:ai_gallery/src/ota/app_release.dart';
+import 'package:ai_gallery/src/ota/release_gateway.dart';
 import 'package:ai_gallery/src/ota/ota_controller.dart';
 import 'package:ai_gallery/src/ota/update_sheet.dart';
 import 'package:flutter/material.dart';
@@ -34,12 +37,67 @@ class FakeOtaGateway implements OtaGateway {
   }
 }
 
+class FakeReleaseGateway implements ReleaseGateway {
+  InstalledApp current = const InstalledApp(
+      platform: 'android', channel: 'direct', version: '0.4.3', buildNumber: 7);
+  AppRelease? release;
+  Object? failure;
+  Object? validationFailure;
+  Directory? directory;
+  int checks = 0;
+  int validations = 0;
+  int installs = 0;
+  int opens = 0;
+  int infoReads = 0;
+  AppRelease? lastOpened;
+  InstallAction action = InstallAction.opened;
+  @override
+  Future<InstalledApp> installedApp() async {
+    infoReads++;
+    return current;
+  }
+
+  @override
+  Future<AppRelease?> check(InstalledApp installed) async {
+    checks++;
+    if (failure != null) throw failure!;
+    return release;
+  }
+
+  @override
+  Future<Directory> downloadDirectory() async => directory!;
+  @override
+  Future<void> validatePackage(File file, AppRelease release) async {
+    validations++;
+    if (validationFailure != null) throw validationFailure!;
+  }
+
+  @override
+  Future<InstallAction> installPackage(File file, AppRelease release) async {
+    installs++;
+    return action;
+  }
+
+  @override
+  Future<void> openRelease(AppRelease release) async {
+    opens++;
+    lastOpened = release;
+  }
+}
+
+OtaController testOtaController() {
+  final controller =
+      OtaController(gateway: FakeOtaGateway(), releases: FakeReleaseGateway());
+  addTearDown(controller.dispose);
+  return controller;
+}
+
 void main() {
   test(
       'ordinary Flutter build reports OTA unavailable without a network request',
       () async {
     final gateway = FakeOtaGateway()..available = false;
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     await ota.download();
@@ -50,7 +108,7 @@ void main() {
   test('check exposes available patch; download stages it for next launch only',
       () async {
     final gateway = FakeOtaGateway()..status = UpdateStatus.outdated;
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     expect(ota.phase, OtaPhase.available);
@@ -66,7 +124,7 @@ void main() {
     final gateway = FakeOtaGateway()
       ..status = UpdateStatus.restartRequired
       ..next = 2;
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     expect(ota.phase, OtaPhase.ready);
@@ -74,9 +132,12 @@ void main() {
   test('slow check times out, while duplicate checks do not overlap', () async {
     final gateway = FakeOtaGateway()..waitForCheck = Completer<UpdateStatus>();
     final ota = OtaController(
-        gateway: gateway, checkTimeout: const Duration(milliseconds: 20));
+        releases: FakeReleaseGateway(),
+        gateway: gateway,
+        checkTimeout: const Duration(milliseconds: 20));
     addTearDown(ota.dispose);
     final first = ota.check();
+    await Future<void>.delayed(Duration.zero);
     await ota.check();
     expect(gateway.checks, 1);
     await first;
@@ -90,7 +151,7 @@ void main() {
       ..status = UpdateStatus.outdated
       ..downloadFailure = const UpdateException(
           message: 'withdrawn', reason: UpdateFailureReason.noUpdate);
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     await ota.download();
@@ -101,7 +162,7 @@ void main() {
       ..status = UpdateStatus.outdated
       ..downloadFailure = const UpdateException(
           message: 'offline', reason: UpdateFailureReason.downloadFailed);
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     await ota.download();
@@ -114,7 +175,7 @@ void main() {
   testWidgets('update sheet offers download then explains full-app restart',
       (tester) async {
     final gateway = FakeOtaGateway()..status = UpdateStatus.outdated;
-    final ota = OtaController(gateway: gateway);
+    final ota = OtaController(releases: FakeReleaseGateway(), gateway: gateway);
     addTearDown(ota.dispose);
     await ota.check();
     await tester.pumpWidget(

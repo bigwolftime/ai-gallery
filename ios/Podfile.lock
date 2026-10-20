@@ -14,7 +14,7 @@ EXTERNAL SOURCES:
     :path: Flutter
 
 SPEC CHECKSUMS:
-  ai_gallery_native: 4518314cf60b8566890dd203790c99c75260f1aa
+  ai_gallery_native: f3742abe3e74689a6103eeb92462af3781b12618
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
 
 PODFILE CHECKSUM: 53a6aebc29ccee84c41f92f409fc20cd4ca011f1

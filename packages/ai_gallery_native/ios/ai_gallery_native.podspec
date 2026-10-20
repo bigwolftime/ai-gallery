@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*.{swift,h,m}'
   s.vendored_frameworks = 'Frameworks/CLiteRTLM.framework'
-  s.frameworks       = 'Photos', 'UIKit', 'Foundation'
+  s.frameworks       = 'Photos', 'UIKit', 'Foundation', 'UniformTypeIdentifiers', 'LinkPresentation'
   s.dependency 'Flutter'
   s.platform         = :ios, '15.0'
 end

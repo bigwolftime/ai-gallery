@@ -1,0 +1,20 @@
+AI Gallery
+Copyright 2026 AI Gallery contributors.
+
+AI Gallery application code, native bridge and original store artwork are licensed under Apache-2.0.
+Third-party components retain their own copyright and license terms.
+
+EmbeddingGemma 2
+Authors: Google DeepMind
+License: Apache-2.0
+https://huggingface.co/google/embeddinggemma-2
+https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm
+The model is downloaded separately; its weights are not bundled with the app.
+
+LiteRT-LM Android 0.18.0
+Authors: The LiteRT-LM Authors
+https://github.com/google-ai-edge/LiteRT-LM
+Upstream LICENSE and THIRD_PARTY_NOTICE.txt are preserved in assets/legal/.
+The packaged iOS framework retains its upstream license bundle.
+
+Flutter and Dart package licenses are available in the in-app license page.

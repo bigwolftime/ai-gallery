@@ -5,6 +5,7 @@ import 'src/gallery_page.dart';
 import 'src/ota/ota_controller.dart';
 import 'src/settings/app_settings.dart';
 import 'src/settings/app_theme.dart';
+import 'src/settings/legal_licenses.dart';
 
 void main() => runApp(const AIGalleryApp());
 
@@ -22,6 +23,7 @@ class _AIGalleryAppState extends State<AIGalleryApp> {
   @override
   void initState() {
     super.initState();
+    registerLegalLicenses();
     settings = widget.settings ?? AppSettingsController();
     unawaited(settings.load());
   }

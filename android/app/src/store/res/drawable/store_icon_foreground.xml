@@ -1,0 +1,11 @@
+<!-- The landscape's sun is also a search lens. Geometry matches store artwork. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#E9F8FF"
+        android:pathData="M31,29H69A7,7 0,0 1,76 36V71A7,7 0,0 1,69 78H31A7,7 0,0 1,24 71V36A7,7 0,0 1,31 29Z" />
+    <path android:fillColor="#073B4B" android:pathData="M30,70L43,49L53,61L61,52L71,70Z" />
+    <path android:fillColor="#FFCE86" android:strokeColor="#073B4B" android:strokeWidth="3"
+        android:pathData="M79,36A11,11 0,1 1,57 36A11,11 0,1 1,79 36Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#073B4B"
+        android:strokeWidth="5" android:strokeLineCap="round" android:pathData="M76,44L84,52" />
+</vector>

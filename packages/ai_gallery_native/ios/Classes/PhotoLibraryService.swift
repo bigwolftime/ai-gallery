@@ -4,6 +4,8 @@ import UIKit
 @MainActor
 final class PhotoLibraryService {
     private let imageManager = PHCachingImageManager()
+    private static let shareSize = CGSize(width: 2400, height: 2400)
+    private static let shareQuality: CGFloat = 0.92
 
     func requestAccess() async -> Bool {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
@@ -65,18 +67,22 @@ final class PhotoLibraryService {
         Dictionary(uniqueKeysWithValues: assets().map { ($0.localIdentifier, $0) })
     }
 
-    func shareURLs(for assets: [PHAsset]) async -> [URL] {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AIGalleryShare", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var urls: [URL] = []
+    func shareItems(for assets: [PHAsset]) async throws -> [PhotoShareItem] {
+        var items: [PhotoShareItem] = []
+        items.reserveCapacity(assets.count)
         for (index, asset) in assets.enumerated() {
-            guard let image = await image(for: asset, targetSize: CGSize(width: 2400, height: 2400), contentMode: .aspectFit, allowNetworkAccess: true), let data = image.jpegData(compressionQuality: 0.92) else { continue }
-            let url = directory.appendingPathComponent("AI-Gallery-\(index + 1).jpg")
-            try? data.write(to: url, options: .atomic)
-            if FileManager.default.fileExists(atPath: url.path) { urls.append(url) }
+            guard let image = await image(for: asset, targetSize: Self.shareSize, contentMode: .aspectFit, allowNetworkAccess: true) else {
+                // Never silently turn a multiple-photo selection into one item.
+                throw PhotoShareError.unreadablePhoto(index + 1)
+            }
+            let item = try autoreleasepool { () throws -> PhotoShareItem in
+                guard let data = image.jpegData(compressionQuality: Self.shareQuality) else {
+                    throw PhotoShareError.encodingPhoto(index + 1)
+                }
+                return try PhotoShareItem(jpegData: data)
+            }
+            items.append(item)
         }
-        return urls
+        return items
     }
 }

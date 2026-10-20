@@ -101,6 +101,24 @@ class AIGalleryNative {
 
   Future<void> openSettings() => _methods.invokeMethod<void>('openSettings');
 
+  // Base version and install operations belong to native code, independently
+  // of the Dart patch version currently running.
+  Future<Map<Object?, Object?>> appUpdateInfo() async =>
+      await _methods.invokeMapMethod<Object?, Object?>('getAppUpdateInfo') ??
+      {};
+  Future<String> appUpdateDirectory() async =>
+      (await _methods.invokeMethod<String>('getAppUpdateDirectory'))!;
+  Future<void> validateAppPackage(
+          String path, String version, int buildNumber) =>
+      _methods.invokeMethod<void>('validateAppPackage',
+          {'path': path, 'version': version, 'buildNumber': buildNumber});
+  Future<String?> installAppPackage(
+          String path, String version, int buildNumber) =>
+      _methods.invokeMethod<String>('installAppPackage',
+          {'path': path, 'version': version, 'buildNumber': buildNumber});
+  Future<void> openUpdateUrl(String url) =>
+      _methods.invokeMethod<void>('openUpdateUrl', {'url': url});
+
   Future<List<GalleryPhoto>> loadPhotos() async {
     final raw =
         await _methods.invokeListMethod<Object?>('loadPhotos') ?? const [];

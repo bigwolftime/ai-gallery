@@ -13,9 +13,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('action', choices=['init', 'doctor', 'release', 'patch'])
 parser.add_argument('--platform', choices=['ios', 'android'], default='ios')
 parser.add_argument('--track', choices=['beta', 'stable', 'staging'], default='beta')
-parser.add_argument('--release-version', default='0.4.0+4')
+parser.add_argument('--release-version')
 parser.add_argument('--publish', action='store_true')
+parser.add_argument('--app-release-manifest-url')
+parser.add_argument('--distribution-channel', choices=['direct', 'public', 'play', 'store', 'sideload', 'appstore', 'testflight'])
 args = parser.parse_args()
+if args.platform == 'android' and args.distribution_channel in ['play', 'store']:
+    parser.error('Android store builds use scripts/build_android_store.py with the ordinary Flutter SDK.')
+# Default patches to the current base; native fixes increment this version.
+actual_version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M)
+if not actual_version:
+    raise SystemExit('pubspec.yaml has no base version.')
+args.release_version = args.release_version or actual_version[1]
 cli = shutil.which('shorebird') or str(Path.home() / '.shorebird/bin/shorebird')
 if not Path(cli).exists():
     raise SystemExit('Install Shorebird first: https://docs.shorebird.dev/code-push/get-started/')
@@ -27,6 +36,18 @@ elif args.action in ['release', 'patch']:
     if not (root / 'shorebird.yaml').exists():
         raise SystemExit('Run python3 scripts/ota.py init after logging in.')
     command += [f'--platforms={args.platform}', f'--dart-define=OTA_TRACK={args.track}']
+    if args.app_release_manifest_url:
+        command += [f'--dart-define=APP_RELEASE_MANIFEST_URL={args.app_release_manifest_url}']
+    if args.distribution_channel:
+        allowed = ['direct', 'public', 'play', 'store'] if args.platform == 'android' else ['sideload', 'appstore', 'testflight']
+        if args.distribution_channel not in allowed:
+            raise SystemExit('Distribution channel does not match the selected platform.')
+        update_channel = 'direct' if args.distribution_channel == 'public' else args.distribution_channel
+        command += [f'--dart-define=APP_DISTRIBUTION_CHANNEL={update_channel}']
+        if args.distribution_channel == 'public':
+            command += ['--dart-define=APP_APPLICATION_ID=net.zonheng.aigallery']
+            if not args.app_release_manifest_url:
+                command += ['--dart-define=APP_RELEASE_MANIFEST_URL=https://img.zonheng.net/apps/ai-gallery/public/releases.json']
     if not args.publish:
         command.append('--dry-run')
     if args.platform == 'ios':
@@ -42,6 +63,8 @@ elif args.action in ['release', 'patch']:
         command += [f'--release-version={args.release_version}', f'--track={args.track}']
         # Keep native/asset difference protection enabled. Never silently allow it.
 environment = os.environ.copy()
+if args.platform == 'android':
+    environment['ORG_GRADLE_PROJECT_distributionChannel'] = 'public' if args.distribution_channel == 'public' else 'direct'
 jdk21 = Path('/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home')
 if jdk21.exists():
     environment['JAVA_HOME'] = str(jdk21)

@@ -18,6 +18,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 
 /** Permissions and presentation run on main; all model operations use one native worker. */
 class AIGalleryNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
@@ -28,9 +29,11 @@ class AIGalleryNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     private lateinit var progress: EventChannel
     private lateinit var photos: PhotoLibraryService
     private lateinit var model: EmbeddingModelService
+    private lateinit var appUpdates: AppUpdateService
     private val main = Handler(Looper.getMainLooper())
     private val modelWorker = Executors.newSingleThreadExecutor()
     private val imageWorker = Executors.newFixedThreadPool(2)
+    private val updateWorker = Executors.newSingleThreadExecutor()
     private var activityBinding: ActivityPluginBinding? = null
     private var activity: Activity? = null
     private var events: EventChannel.EventSink? = null
@@ -40,13 +43,14 @@ class AIGalleryNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         this.binding = binding
         photos = PhotoLibraryService(binding.applicationContext)
         model = EmbeddingModelService(binding.applicationContext)
+        appUpdates = AppUpdateService(binding.applicationContext)
         channel = MethodChannel(binding.binaryMessenger, "ai_gallery/native")
         progress = EventChannel(binding.binaryMessenger, "ai_gallery/progress")
         channel.setMethodCallHandler(this); progress.setStreamHandler(this)
     }
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null); progress.setStreamHandler(null)
-        modelWorker.execute { model.close() }; modelWorker.shutdown(); imageWorker.shutdown()
+        modelWorker.execute { model.close() }; modelWorker.shutdown(); imageWorker.shutdown(); updateWorker.shutdown()
     }
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activityBinding = binding; activity = binding.activity; binding.addRequestPermissionsResultListener(this)
@@ -72,14 +76,41 @@ class AIGalleryNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         else result.error("PHOTO_PERMISSION", "请允许 AI Gallery 访问照片。", null)
         return true
     }
-    private fun worker(result: MethodChannel.Result, image: Boolean = false, action: () -> Any?) {
-        (if (image) imageWorker else modelWorker).execute {
+    private fun worker(result: MethodChannel.Result, image: Boolean = false,
+                       executor: ExecutorService = if (image) imageWorker else modelWorker, action: () -> Any?) {
+        executor.execute {
             try { val value = action(); main.post { result.success(value) } }
             catch (failure: Throwable) { main.post { result.error("NATIVE_ERROR", failure.message ?: failure.javaClass.simpleName, null) } }
         }
     }
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "getAppUpdateInfo" -> worker(result, executor = updateWorker) { appUpdates.info() }
+            "getAppUpdateDirectory" -> worker(result, executor = updateWorker) { appUpdates.directory().absolutePath }
+            "validateAppPackage" -> worker(result, executor = updateWorker) {
+                appUpdates.validate(requireNotNull(call.argument<String>("path")),
+                    requireNotNull(call.argument<String>("version")), requireNotNull(call.argument<Number>("buildNumber")).toLong())
+                null
+            }
+            "installAppPackage" -> updateWorker.execute {
+                try {
+                    val file = appUpdates.validate(requireNotNull(call.argument<String>("path")),
+                        requireNotNull(call.argument<String>("version")), requireNotNull(call.argument<Number>("buildNumber")).toLong())
+                    main.post {
+                        try {
+                            val host = activity ?: error("页面未准备好，请重试。")
+                            result.success(appUpdates.openInstaller(host, file))
+                        } catch (failure: Exception) { result.error("INSTALL_ERROR", failure.message, null) }
+                    }
+                } catch (failure: Exception) { main.post { result.error("INSTALL_ERROR", failure.message, null) } }
+            }
+            "openUpdateUrl" -> {
+                try {
+                    val host = activity ?: error("页面未准备好，请重试。")
+                    appUpdates.openUrl(host, requireNotNull(call.argument<String>("url")))
+                    result.success(null)
+                } catch (failure: Exception) { result.error("UPDATE_LINK_ERROR", failure.message, null) }
+            }
             "getModelDirectory" -> worker(result) { model.modelDirectory().absolutePath }
             "initializeModel" -> worker(result) {
                 model.initialize(requireNotNull(call.argument<String>("modelPath")), requireNotNull(call.argument<String>("indexVersion")))
@@ -121,7 +152,11 @@ class AIGalleryNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
                 modelWorker.execute {
                     try {
                         val allowed = photos.photos().associateBy { it.id }
-                        val uris = ArrayList(ids.mapNotNull { allowed[it]?.uri })
+                        // Keep all selected images, or fail explicitly; never
+                        // silently reduce a multiple-photo share to one URI.
+                        val uris = ArrayList(ids.distinct().map { id ->
+                            allowed[id]?.uri ?: error("部分图片已删除或无法访问，请重新选择。")
+                        })
                         check(uris.isNotEmpty()) { "图片已删除或无法访问。" }
                         main.post {
                             try {

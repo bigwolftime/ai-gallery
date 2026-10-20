@@ -1,26 +1,27 @@
 # OTA 增量更新（Shorebird）
 
-## 两类更新
+## 三类更新
 
-- 模型：继续使用 Hugging Face，独立下载、续传、SHA-256 校验。无需随 Dart 补丁重新下载。
+- 模型：Hugging Face / 七牛双源测速，独立下载、续传、SHA-256 校验。无需随 Dart 补丁重新下载。
 - Flutter/Dart 代码：通过 Shorebird 发布与基础包版本绑定的增量补丁。
+- APK/IPA 整包：版本清单与文件由七牛托管，Android 下载后打开系统安装器，iOS 自签版引导下载并通过 SideStore 覆盖安装。完整发布说明见 [app-updates.md](app-updates.md)。
 
 Swift/Kotlin、LiteRT-LM 框架、权限、Flutter 资源文件的变化需要新的基础包。模型清单是资源文件；更改它不能作为 Dart 补丁强行发布。远端模型清单方案见 `model-delivery.md`。
 
 ## 客户端行为
 
 - 启动后异步检查，不等待更新服务器再显示照片/下载模型。
-- 右上角“检查更新”可查看状态、当前补丁号、下载可用补丁。
+- “设置 → 检查更新”先查新基础包，再查当前基础包补丁。
 - 下载完成后，下次完整启动才应用；不会强制退出 App。
 - 新补丁不删除模型或照片索引。
-- 普通 `flutter build` 包明确显示不支持在线更新，避免误报安装成功。
+- 普通 `flutter build` 包仍可检查整包，明确提示补丁不可用；打开系统安装器不会误报为安装成功。
 - `shorebird.yaml` 的 `auto_update: false` 由客户端控制下载流程。
 
 ## 当前基础版本
 
 - App：AI Gallery
 - Bundle ID / Android application ID：`com.aigallery.app`
-- 基础包：`0.4.0+4`
+- 基础包：iOS / Android `0.4.4+8`（增加原生整包更新接口）
 - Shorebird Flutter：`3.47.7`（专用引擎，系统 Homebrew Flutter 保留）
 - Shorebird App ID：`8bbe2ac9-0d49-49c0-98c4-8400cbaa7a71`
 - 初始测试通道：`beta`，通过 `OTA_TRACK=beta` 编译。
@@ -51,23 +52,23 @@ python3 scripts/package_ios.py --ota
 
 ## 发布补丁
 
-修改 Dart 后保持 `pubspec.yaml` 的基础版本 `0.4.0+4` 不变。补丁号由 Shorebird 管理。
+修改 Dart 后，`pubspec.yaml` 必须与目标平台已安装的基础版本完全一致：当前两端均为 `0.4.4+8`。维护更早基础包时需切回其完整基础版本，并保持对应原生和资源内容一致。补丁号由 Shorebird 管理。
 
 ```sh
 # 先校验，保留 native/asset diff 检查。
-python3 scripts/ota.py patch --platform ios --track beta --release-version 0.4.0+4
-python3 scripts/ota.py patch --platform android --track beta --release-version 0.4.0+4
+python3 scripts/ota.py patch --platform ios --track beta --release-version 0.4.4+8
+python3 scripts/ota.py patch --platform android --track beta --release-version 0.4.4+8
 
 # 校验通过后上传 beta 补丁。
-python3 scripts/ota.py patch --platform ios --track beta --release-version 0.4.0+4 --publish
-python3 scripts/ota.py patch --platform android --track beta --release-version 0.4.0+4 --publish
+python3 scripts/ota.py patch --platform ios --track beta --release-version 0.4.4+8 --publish
+python3 scripts/ota.py patch --platform android --track beta --release-version 0.4.4+8 --publish
 ```
 
 脚本不使用 `--allow-native-diffs` 或 `--allow-asset-diffs`。遇到这些差异应发新基础包；补丁自动使用原基础包的引擎。
 
 beta 包只检查 beta 通道。生产包需使用 `--track stable` 构建与发布，避免混用。
 
-发布基础包后，立即保留 IPA/APK，再执行 patch。patch 会覆盖 `build` 下的产物；不要把补丁构建产物当作基础包分发。此次基础安装包单独保存在 `dist/AI-Gallery-OTA-0.4.0-unsigned.ipa` 和 `dist/AI-Gallery-OTA-0.4.0.apk`，版本和校验值见 `dist/ota-baseline.json`。旧的 `AI-Gallery-Flutter` 安装包是普通 Flutter 包，不能用于验证 OTA。
+发布基础包后，立即保留 IPA/APK，再执行 patch。patch 会覆盖 `build` 下的产物；不要把补丁构建产物当作基础包分发。此次基础安装包单独保存在 `dist/AI-Gallery-OTA-0.4.1-unsigned.ipa` 和 `dist/AI-Gallery-OTA-0.4.1.apk`，版本和校验值见 `dist/ota-baseline.json`。旧的 `AI-Gallery-Flutter` 安装包是普通 Flutter 包，不能用于验证 OTA。
 
 ## 验证与回滚
 
@@ -127,3 +128,53 @@ beta 包只检查 beta 通道。生产包需使用 `--track stable` 构建与发
 静态检查及 40 项测试通过。既有分享和减少动态效果测试改为使用长按；新增设置页集成测试验证第一项分析使用同一索引、跳过已分析的 20 张照片，并在增加 1 张照片后只追加处理 1 张。小屏设置页通过滚动访问更新入口。
 
 已发布 beta：iOS 补丁 7、Android 补丁 8。原生和资源差异校验通过，基础安装包未重打；发布与下载回执见 `dist/ota-entry-update.json`。iOS 代码共享率仍为约 65.3%，工具性能提示保持存在，真机流畅度未测量。
+
+## 图片分享修复：新基础包 0.4.1+5（2026-10-13）
+
+iOS 原先把临时 JPEG 文件 URL 作为分享项，接收 App 可能显示为文件。新版为每张照片创建独立的 `UIActivityItemSource`，提供 UIImage、JPEG 类型和 JPEG 图片预览；不再提供文件 URL，也不把多张照片嵌套成一个分享项。选中照片丢失、读取或编码失败时明确报错，取消此次准备，保留选择供重试；Android 同样禁止静默丢弃选中照片。
+
+这些是 Swift/Kotlin 原生改动，必须安装新的 `dist/AI-Gallery-OTA-0.4.1-unsigned.ipa` 或 `dist/AI-Gallery-OTA-0.4.1.apk`，旧包无法通过 OTA 获得修复。沿用同一自签账号和应用标识覆盖安装，不先卸载，可保留模型、设置和旧索引。新基础包包含此前所有界面改动；后续 Dart 补丁绑定 `0.4.1+5`。脚本默认读取当前版本，重新初始化 OTA 也不会把版本号重置回旧基础版本。
+
+两端基础包已发布，release ID 为 `895189`。42 项 Flutter 测试、静态检查和 `python3 scripts/test_ios_share.py` 的原生 UIKit 协议检查通过。测试验证三张独立 UIImage、JPEG 类型、可解码预览、无文件 URL、无效数据报错、多选标识完整转发与失败重试。iOS/Android 原生编译及安装包结构验证通过，模型权重不在安装包中。
+
+微信分享扩展的实际接收和显示效果尚未在真机验证，接收方也可能限制多图数量。建议覆盖安装后先用两三张照片检查“发送给朋友”的图片预览与数量。发布回执和包校验值见 `dist/share-base-release.json`。
+
+## iOS 高斯模糊界面（2026-10-14）
+
+搜索栏和更新弹窗使用 `BackdropFilter` 对实际背景做高斯模糊，圆角只裁切输出；照片滚动时背景颜色随之变化。使用较薄的深浅色遮罩，移除投影和装饰描边。顶部使用透明 Cupertino 导航栏，照片列表延伸至导航栏和搜索栏下方。设置卡片沿用同一材质，因下方是纯色背景，模糊效果自然较弱。Android 保留原有 Material 界面。
+
+高对比度模式使用实色背景；当前 Flutter SDK 没有暴露 iOS“减少透明度”状态，不能声称跟随该开关。这是 Flutter 渲染的背景高斯模糊，不是原生 Liquid Glass。仅可通过 Dart 补丁更新，绑定基础包 `0.4.1+5`；旧基础包需要先覆盖安装 0.4.1。
+
+已发布至 beta 的 iOS 补丁 2（patch ID `717085`），客户端检查和 1,665,080 字节补丁下载验证通过。46 项 Flutter 测试和静态检查通过，深浅主题的首页、设置与更新弹窗已生成预览并检查；测试覆盖键盘布局、列表最后一张照片可达、主题切换和 Android 样式隔离。真机滚动帧率和补丁实际激活仍需手机验证。补丁发布与下载验证回执见 `dist/ota-glass-update.json`。
+
+## Android 分析闪退：新基础包 0.4.3+7（2026-10-20）
+
+0.4.1 发布包在调用 `nativeComputeEmbedding` 时出现 `ClassNotFoundException: com.google.ai.edge.litertlm.InputData$Text`，随后原生进程 SIGABRT。LiteRT-LM 0.18.0 的 AAR 未携带 consumer rules，R8 改名、裁剪了 JNI 按名称查找的输入类及结果类成员；仅编译和 Flutter 测试无法覆盖这个问题。
+
+原生插件现在通过 `consumer-rules.pro` 保留 `com.google.ai.edge.litertlm` 下的类和成员，其余应用代码仍执行 R8 优化。`python3 scripts/test_android_runtime.py <apk-path>` 检查最终 APK 中 Text/Image/Audio 三种输入及 EmbeddingResponse 的原名、构造方法和访问方法；旧 APK 检查失败，新发布构建检查通过。
+
+Android 必须覆盖安装 `dist/AI-Gallery-OTA-0.4.3.apk`，Dart OTA 无法修复旧包的 DEX。沿用相同包名和签名、不卸载可保留模型和已生成索引；模型及索引版本未变。新版也包含去掉 Android 弹窗中 iCloud 描述的修正。iOS 仍使用 0.4.1+5，不受 Android R8 规则影响。发布和验证回执见 `dist/android-jni-fix-release.json`。
+
+标准 Android 模拟器（硬件标识 `goldfish` / `ranchu`）另有 Vulkan 驱动等待问题：GPU 能初始化，但图片计算出现 `vkWaitForFences` 长时间等待，且未成功落索引。模拟器现在统一为文字和视觉编码选择 CPU，并使用独立的运行时缓存；真机继续使用 GPU，模型文件和索引格式相同。CPU 路径已通过实际已压缩 APK 的 instrumentation 检查：文字、图片均返回 256 个有限浮点数。逐张失败会记录原生异常日志，失败照片仍保留为待分析。
+
+0.4.3+7 的 Android release ID 为 `910960`，新基础包的客户端更新接口检查通过。模拟器已覆盖安装，直接复用一个已下载模型；13 张真实测试照片成功落库，256 维向量均有限且归一化，重启后文本搜索返回 13 张带分数的候选。再次分析只处理剩余 65 张，验证了增量跳过；本次验证结束时剩余照片仍在分析，不代表 78 张全库已完成。临时诊断应用和其专用缓存已清理。真机 GPU 的实际运行尚待设备验证。
+
+## 模型双源测速与续传切换（2026-10-20）
+
+模型下载现在并行测速 Hugging Face 和 `https://img.zonheng.net/embeddinggemma-2-740m.litertlm`，每源采样 256 KiB，探测最多等待 5 秒，优先使用更快的线路。失败后自动切换备用源，并通过最终 SHA-256 防止错误镜像或混合内容被激活。已下载模型免测速，相同模型的照片索引不变。详细行为与 CDN 配置建议见 `model-delivery.md`。
+
+这是 Dart 修改，内置模型清单资源未变，无需重装：Android 基础包 0.4.3+7 对应补丁 1（ID `732741`），iOS 基础包 0.4.1+5 对应补丁 4（ID `732750`），均发布至 beta。用户在设置检查更新、下载并完整重启后生效；保留原始基础 IPA/APK，不用补丁构建产物替换它们。工作区版本已恢复到 Android 0.4.3+7。
+
+55 项 Flutter 测试与静态检查通过。两个真实源的 256 KiB 内容均匹配已验证模型的前缀；当前 Mac 的一次采样为七牛约 0.62 秒、Hugging Face 约 3.54 秒，手机会自行测速，不能把此结果推广为各地区的速度。三种平台/架构的补丁下载验证见 `dist/ota-model-mirrors-update.json`；未确认手机实际激活，也未实测 iOS 补丁帧率。线上 CDN 配置本次未修改。
+
+## 整包升级：新基础包 0.4.4+8（2026-10-20）
+
+Android 和 iOS 新基础包均已发布至 Shorebird，release ID 为 `911094`。启动及设置入口先检查整包版本；旧基础包的补丁不能替代新增的原生安装接口，因此首次需手动覆盖安装本次 APK/IPA。新整包与后续补丁的完整发布步骤见 [app-updates.md](app-updates.md)。
+
+Android 已在模拟器实际完成“发现 0.4.4 → 下载 → SHA-256 校验 → 包名/版本/签名校验 → 允许此来源 → 返回继续安装 → 系统确认 → 安装成功”。安装版本由 0.4.3+7 升为 0.4.4+8；升级前后均保留 1 份模型和 77 条有效、归一化的 256 维索引。实测错误包名、旧版本、不同签名、错误预期版本和更新目录外文件均被拒绝。临时测试入口、TLS 证书和服务未进入发布包，测试辅助应用及端口转发已清理。
+
+67 项 Flutter 测试与静态检查通过；Android 最终 APK 的 LiteRT-LM JNI 合约通过。iOS 原生 archive 编译及 IPA 文件结构验证通过，包含 Shorebird 引擎、必要运行库和正确的 CFBundleExecutable；两端均未打包模型权重。iOS SideStore 真机覆盖安装仍需手机验证。
+
+安装包为 `dist/AI-Gallery-OTA-0.4.4.apk` 与 `dist/AI-Gallery-OTA-0.4.4-unsigned.ipa`。版本清单、不可变对象上传计划和验证回执在 `dist/app-updates/`。整包与清单已按用户确认上传七牛 `pictures` 空间，经 `img.zonheng.net` HTTPS 公网验证：两端安装包均支持 206 Range 续传，长度、七牛全文件 ETag 和 64 KiB 文件头与本地匹配。安装包先发布、清单最后发布；正式清单地址为 `https://img.zonheng.net/apps/ai-gallery/releases.json`，客户端同样的唯一 `check` 参数请求返回与本地完全相同的清单。发布与验证回执见 `dist/app-updates/hosting-verification.json`。
+
+线上清单又通过实际 Dart 解析器验证：Android 旧 build 7 和 iOS 旧 build 5 均匹配新 build 8，当前 build 8 不重复提示整包升级。模拟器已启动正式新 APK，设置中的更新状态显示“当前应用已是最新版本”。

@@ -1,0 +1,15 @@
+Find the photo you remember without scrolling through your whole gallery.
+
+AI Gallery builds a local index of the system photos you allow it to access. Search with Chinese or English descriptions, preview images, select several photos and share them through Android's system share sheet.
+
+• On-device photo analysis and search; photos and queries are not uploaded.
+• Incremental analysis skips images already indexed for the current model.
+• Relevance scores, focused initial results and an option to expand the search.
+• System, light and dark themes.
+• No account and no advertising SDK.
+
+The first model setup requires an explicit download of approximately 485 MB. The APK does not include model weights. After setup, photo search works offline. Analysis runs while the app is open; speed depends on your device. Photos you have not allowed the app to access cannot be searched.
+
+This is an early Beta. The current interface is Simplified Chinese; search queries support Chinese and English. Independently distributed builds support in-app update checks and optional restart-based patches. Store-specific builds use the corresponding store for updates.
+
+Screenshots use original, labelled demo illustrations. Video search and cloud photo analysis are not included.

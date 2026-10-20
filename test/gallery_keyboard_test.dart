@@ -1,3 +1,4 @@
+import 'ota_test.dart' show testOtaController;
 import 'package:ai_gallery/src/gallery_controller.dart';
 import 'package:ai_gallery/src/gallery_page.dart';
 import 'package:flutter/material.dart';
@@ -20,7 +21,8 @@ void main() {
       addTearDown(controller.dispose);
       await tester.pumpWidget(MaterialApp(
           theme: ThemeData(platform: TargetPlatform.iOS),
-          home: GalleryPage(controller: controller)));
+          home: GalleryPage(
+              controller: controller, otaController: testOtaController())));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '还没写完的搜索词');
       final keyboardHeight = size.height > 600 ? 300.0 : 216.0;
@@ -57,7 +59,8 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(MaterialApp(
         theme: ThemeData(platform: TargetPlatform.iOS),
-        home: GalleryPage(controller: controller)));
+        home: GalleryPage(
+            controller: controller, otaController: testOtaController())));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '月饼');
     await tester.pumpAndSettle();
@@ -85,7 +88,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: MediaQuery(
             data: const MediaQueryData(disableAnimations: true),
-            child: GalleryPage(controller: controller))));
+            child: GalleryPage(
+                controller: controller, otaController: testOtaController()))));
     await tester.pumpAndSettle();
     await tester.longPress(find.byKey(const ValueKey('0')));
     await tester.pump();

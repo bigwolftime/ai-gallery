@@ -1,7 +1,7 @@
 name: ai_gallery
 description: Cross-platform AI Gallery with Flutter UI and native photo/model adapters.
 publish_to: "none"
-version: 0.4.0+4
+version: 0.4.5+9
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -24,3 +24,4 @@ flutter:
   assets:
     - assets/models/model-manifest.json
     - shorebird.yaml
+    - assets/legal/

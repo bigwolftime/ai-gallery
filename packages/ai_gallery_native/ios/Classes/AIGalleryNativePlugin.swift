@@ -20,6 +20,25 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
         Task { @MainActor in
             do {
                 switch call.method {
+                case "getAppUpdateInfo":
+                    guard let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                          let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+                          let buildNumber = Int(build) else {
+                        throw NSError(domain: "AIGallery", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法读取当前应用版本。"])
+                    }
+                    let receipt = Bundle.main.appStoreReceiptURL
+                    let hasReceipt = receipt.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+                    let channel = hasReceipt ? (receipt?.lastPathComponent == "sandboxReceipt" ? "testflight" : "appstore") : "sideload"
+                    result(["platform": "ios", "channel": channel, "version": version, "buildNumber": buildNumber])
+                case "openUpdateUrl":
+                    guard let args = call.arguments as? [String: Any], let value = args["url"] as? String,
+                          let url = URL(string: value), url.scheme == "https", url.host != nil else {
+                        throw NSError(domain: "AIGallery", code: 1, userInfo: [NSLocalizedDescriptionKey: "更新地址必须使用 HTTPS。"])
+                    }
+                    guard await UIApplication.shared.open(url) else {
+                        throw NSError(domain: "AIGallery", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法打开更新地址，请稍后重试。"])
+                    }
+                    result(nil)
                 case "getModelDirectory":
                     result(try model.modelDirectory().path)
                 case "initializeModel":
@@ -73,9 +92,19 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
                     result(try await model.search(query: query, photoLibrary: photoLibrary, limit: limit))
                 case "sharePhotos":
                     let ids = (call.arguments as? [String: Any])?["photoIds"] as? [String] ?? []
-                    let assets = ids.compactMap { photoLibrary.asset(id: $0) }
-                    let urls = await photoLibrary.shareURLs(for: assets)
-                    presentShareSheet(items: urls)
+                    var seen = Set<String>()
+                    let uniqueIDs = ids.filter { seen.insert($0).inserted }
+                    guard !uniqueIDs.isEmpty else {
+                        throw PhotoShareError.emptySelection
+                    }
+                    let assets = try uniqueIDs.map { id -> PHAsset in
+                        guard let asset = photoLibrary.asset(id: id) else {
+                            throw PhotoShareError.missingPhoto
+                        }
+                        return asset
+                    }
+                    let items = try await photoLibrary.shareItems(for: assets)
+                    try presentShareSheet(items: items)
                     result(nil)
                 default:
                     result(FlutterMethodNotImplemented)
@@ -86,8 +115,10 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
         }
     }
 
-    private func presentShareSheet(items: [URL]) {
-        guard !items.isEmpty, let root = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap({ $0.windows }).first(where: { $0.isKeyWindow })?.rootViewController else { return }
+    private func presentShareSheet(items: [PhotoShareItem]) throws {
+        guard !items.isEmpty, let root = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).filter({ $0.activationState == .foregroundActive }).flatMap({ $0.windows }).first(where: { $0.isKeyWindow })?.rootViewController else {
+            throw PhotoShareError.missingPresenter
+        }
         var presenter = root
         while let presented = presenter.presentedViewController { presenter = presented }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)

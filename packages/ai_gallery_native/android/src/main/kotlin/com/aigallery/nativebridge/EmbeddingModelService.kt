@@ -1,6 +1,8 @@
 package com.aigallery.nativebridge
 
 import android.content.Context
+import android.os.Build
+import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EmbeddingEngine
 import com.google.ai.edge.litertlm.EmbeddingEngineConfig
@@ -11,6 +13,11 @@ import kotlin.math.sqrt
 
 /** Called only on the plugin's serial worker; GPU context and index never cross threads. */
 class EmbeddingModelService(private val context: Context) {
+    companion object {
+        private const val TAG = "AIGalleryModel"
+        private val EMULATOR_HARDWARE = setOf("goldfish", "ranchu")
+    }
+
     private val index = EmbeddingIndexService(context)
     private var engine: EmbeddingEngine? = null
     private val options = EmbeddingOptions(normalize = true, outputSize = EmbeddingIndexService.DIMENSIONS, visionTokensPerImage = 70)
@@ -23,9 +30,14 @@ class EmbeddingModelService(private val context: Context) {
         val file = File(path).canonicalFile
         check(file.parentFile == modelDirectory().canonicalFile && file.isFile && version.isNotBlank()) { "下载模型不存在或路径不正确。" }
         engine?.close(); engine = null
-        val runtimeCache = File(context.cacheDir, "LiteRTLM").apply { mkdirs() }
-        val loaded = EmbeddingEngine(EmbeddingEngineConfig(modelPath = file.absolutePath, backend = Backend.GPU(),
-            visionBackend = Backend.GPU(), cacheDir = runtimeCache.absolutePath, visionTokensPerImage = 70))
+        // Emulator Vulkan can initialize successfully but stall on inference.
+        // CPU works for both modalities; physical devices retain GPU acceleration.
+        val emulator = Build.HARDWARE in EMULATOR_HARDWARE
+        val backend = if (emulator) Backend.CPU() else Backend.GPU()
+        val runtimeCache = File(context.cacheDir, if (emulator) "LiteRTLM-cpu" else "LiteRTLM").apply { mkdirs() }
+        Log.i(TAG, "Initializing embeddings with ${if (emulator) "CPU (emulator)" else "GPU"}")
+        val loaded = EmbeddingEngine(EmbeddingEngineConfig(modelPath = file.absolutePath, backend = backend,
+            visionBackend = backend, cacheDir = runtimeCache.absolutePath, visionTokensPerImage = 70))
         loaded.initialize()
         engine = loaded
         loadedPath = path
@@ -41,7 +53,11 @@ class EmbeddingModelService(private val context: Context) {
         pending.forEachIndexed { position, id ->
             val vector = try {
                 normalize(runtime.computeEmbedding(listOf(InputData.Image(photos.jpeg(id, 1024))), options).embedding)
-            } catch (_: Exception) { null }
+            } catch (failure: Exception) {
+                // Preserve the underlying inference error for Android diagnostics.
+                Log.w(TAG, "Unable to analyze photo $id", failure)
+                null
+            }
             // Save errors are surfaced; failed photo reads/inference remain pending for retry.
             if (vector != null) { index.upsert(id, vector); succeeded++ }
             progress(position + 1, pending.size)

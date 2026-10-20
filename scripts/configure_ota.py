@@ -21,6 +21,6 @@ pubspec = root / 'pubspec.yaml'
 text = pubspec.read_text()
 if '    - shorebird.yaml' not in text:
     text = text.replace('  assets:\n', '  assets:\n    - shorebird.yaml\n')
-text = re.sub(r'^version:.*$', 'version: 0.4.0+4', text, flags=re.M)
+# Initializing OTA must not reset a newer native baseline version.
 pubspec.write_text(text)
 print('Configured real Shorebird app ID; updates are controlled by the in-app UI.')

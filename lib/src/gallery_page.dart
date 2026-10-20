@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:ai_gallery_native/ai_gallery_native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'gallery_controller.dart';
 import 'ota/ota_controller.dart';
+import 'ota/update_sheet.dart';
 import 'settings/settings_page.dart';
+import 'ui/ios_glass.dart';
 
 const _transitionDuration = Duration(milliseconds: 180);
 const _revealDuration = Duration(milliseconds: 240);
@@ -30,7 +33,12 @@ class _GalleryPageState extends State<GalleryPage> {
   final query = TextEditingController();
   final searchFocus = FocusNode();
   final scroll = ScrollController();
+  final dockKey = GlobalKey();
+  double dockExtent = 0;
+  bool dockMeasurementQueued = false;
   late final OtaController ota;
+  late final Listenable changes;
+  int? dismissedRelease;
   bool dialogOpen = false;
   String? lastNotice;
 
@@ -42,7 +50,8 @@ class _GalleryPageState extends State<GalleryPage> {
     controller.addListener(onUpdate);
     controller.start();
     ota = widget.otaController ?? OtaController();
-    unawaited(ota.check());
+    changes = Listenable.merge([controller, ota]);
+    if (ota.automaticChecksAllowed) unawaited(ota.check());
   }
 
   void onSearchFocusChanged() {
@@ -51,28 +60,60 @@ class _GalleryPageState extends State<GalleryPage> {
 
   void dismissKeyboard() => searchFocus.unfocus();
 
+  // The floating dock can grow for keyboard/selection/progress/large text.
+  // Measure it after layout so the last photo and expansion action stay usable.
+  void measureDock() {
+    if (dockMeasurementQueued) return;
+    dockMeasurementQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      dockMeasurementQueued = false;
+      if (!mounted) return;
+      final box = dockKey.currentContext?.findRenderObject();
+      if (box is RenderBox &&
+          box.hasSize &&
+          (box.size.height - dockExtent).abs() > .5) {
+        setState(() => dockExtent = box.size.height);
+      }
+    });
+  }
+
   void onUpdate() {
     if (!mounted) return;
     if (controller.promptRequested && !dialogOpen) {
       dialogOpen = true;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
+        // Both platforms index locally; keep shared copy free of cloud-provider names.
+        final description =
+            '将在本地为 ${controller.photos.length} 张照片建立搜索索引，已分析的照片会跳过。图片不会上传。';
         final accept = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('分析你的照片？'),
-            content: Text(
-                '将在本地为 ${controller.photos.length} 张照片建立搜索索引，已分析的照片会跳过。图片不会上传；仅在 iCloud 中的图片可能需要下载。'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('暂不')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('开始分析')),
-            ],
-          ),
+          builder: (context) => usesIosStyle(context)
+              ? CupertinoAlertDialog(
+                  title: const Text('分析你的照片？'),
+                  content: Text(description),
+                  actions: [
+                      CupertinoDialogAction(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('暂不')),
+                      CupertinoDialogAction(
+                          isDefaultAction: true,
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('开始分析')),
+                    ])
+              : AlertDialog(
+                  title: const Text('分析你的照片？'),
+                  content: Text(description),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('暂不')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('开始分析')),
+                  ],
+                ),
         );
         if (!mounted) return;
         dialogOpen = false;
@@ -112,13 +153,17 @@ class _GalleryPageState extends State<GalleryPage> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-        animation: controller,
+        animation: changes,
         builder: (context, _) => Scaffold(
           resizeToAvoidBottomInset: true,
-          appBar: AppBar(
-            title: const Text('AI Gallery'),
+          extendBodyBehindAppBar: usesIosStyle(context),
+          appBar: AdaptiveNavigationBar(
+            platform: Theme.of(context).platform,
+            title: 'AI Gallery',
             actions: [
-              TextButton(
+              adaptiveTextAction(
+                context,
+                label: '设置',
                 onPressed: () {
                   dismissKeyboard();
                   Navigator.push(
@@ -127,26 +172,81 @@ class _GalleryPageState extends State<GalleryPage> {
                           builder: (_) =>
                               SettingsPage(ota: ota, gallery: controller)));
                 },
-                child: const Text('设置'),
               ),
               // Long press is the only entry into selection. Keep an explicit
               // exit so users can return to normal photo browsing afterwards.
               if (controller.selectionMode)
-                TextButton(
-                    onPressed: controller.toggleSelectionMode,
-                    child: const Text('完成')),
+                adaptiveTextAction(context,
+                    label: '完成', onPressed: controller.toggleSelectionMode),
             ],
           ),
           // Keep the search bar inside the resized body. A bottomNavigationBar
           // stays behind the keyboard; adding viewInsets here would lift twice.
-          body: Column(children: [
-            Expanded(child: buildGalleryContent()),
-            buildSearchBar(),
-          ]),
+          body: usesIosStyle(context)
+              ? Column(children: [
+                  if (showBaseUpdateBanner)
+                    Padding(
+                        padding: EdgeInsets.only(
+                            top: MediaQuery.paddingOf(context).top +
+                                AdaptiveNavigationBar.iosHeight),
+                        child: buildUpdateBanner()),
+                  Expanded(
+                      child: buildGalleryContent(
+                          topPadding: showBaseUpdateBanner
+                              ? 8
+                              : MediaQuery.paddingOf(context).top +
+                                  AdaptiveNavigationBar.iosHeight +
+                                  8,
+                          bottomPadding: dockExtent + 24)),
+                ])
+              : Column(children: [
+                  if (showBaseUpdateBanner) buildUpdateBanner(),
+                  Expanded(child: buildGalleryContent()),
+                  buildSearchBar(),
+                ]),
+          // Scaffold positions this overlay above the keyboard. The photos can
+          // scroll underneath its bounded blur without a second viewInset.
+          bottomSheet: usesIosStyle(context) ? buildFloatingDock() : null,
         ),
       );
 
-  Widget buildGalleryContent() {
+  bool get showBaseUpdateBanner =>
+      ota.fullRelease != null &&
+      ota.fullRelease!.buildNumber != dismissedRelease;
+
+  Widget buildUpdateBanner() => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: AdaptiveGlassCard(
+          child: ListTile(
+        title: Text('发现新版本 ${ota.fullRelease!.version}'),
+        subtitle: const Text('需要安装新版应用，已有照片索引会保留'),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          adaptiveTextAction(context, label: '更新', onPressed: () {
+            dismissKeyboard();
+            showUpdateDialog(context, controller: ota);
+          }),
+          IconButton(
+              tooltip: '稍后更新',
+              icon: const Icon(Icons.close),
+              onPressed: () => setState(
+                  () => dismissedRelease = ota.fullRelease!.buildNumber)),
+        ]),
+      )));
+
+  Widget buildFloatingDock() {
+    measureDock();
+    return NotificationListener<SizeChangedLayoutNotification>(
+      onNotification: (_) {
+        measureDock();
+        return true;
+      },
+      child: SizeChangedLayoutNotifier(
+          child: KeyedSubtree(key: dockKey, child: buildSearchBar())),
+    );
+  }
+
+  Widget buildGalleryContent(
+      {double topPadding = 8, double bottomPadding = 24}) {
     if (controller.loading) return ModelLoadingView(controller: controller);
     if (controller.needsModelDownload) {
       return ModelDownloadView(controller: controller);
@@ -170,7 +270,7 @@ class _GalleryPageState extends State<GalleryPage> {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          padding: EdgeInsets.fromLTRB(16, topPadding, 16, 12),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10),
@@ -181,7 +281,7 @@ class _GalleryPageState extends State<GalleryPage> {
         ),
         SliverToBoxAdapter(
             child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           child: controller.hasMore
               ? OutlinedButton.icon(
                   onPressed: () {
@@ -300,21 +400,35 @@ class _GalleryPageState extends State<GalleryPage> {
             child: Row(children: [
               Text('已选择 ${controller.selected.length} 张'),
               const Spacer(),
-              FilledButton.icon(
-                  onPressed:
-                      controller.sharing ? null : () => controller.share(),
-                  icon: const Icon(Icons.ios_share),
-                  label: const Text('分享')),
+              if (usesIosStyle(context))
+                adaptivePrimaryAction(context,
+                    onPressed:
+                        controller.sharing ? null : () => controller.share(),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.ios_share, size: 18),
+                      SizedBox(width: 8),
+                      Text('分享')
+                    ]))
+              else
+                FilledButton.icon(
+                    onPressed:
+                        controller.sharing ? null : () => controller.share(),
+                    icon: const Icon(Icons.ios_share),
+                    label: const Text('分享')),
             ])),
       if (searchFocus.hasFocus)
         Align(
             alignment: Alignment.centerRight,
-            child: TextButton.icon(
-                onPressed: dismissKeyboard,
-                // Reuse the existing chevron in the baseline's icon font.
-                icon: const Icon(Icons.expand_more, size: 18),
-                label: const Text('收起键盘'))),
+            child: usesIosStyle(context)
+                ? adaptiveTextAction(context,
+                    label: '收起键盘', onPressed: dismissKeyboard)
+                : TextButton.icon(
+                    onPressed: dismissKeyboard,
+                    // Reuse the existing chevron in the baseline's icon font.
+                    icon: const Icon(Icons.expand_more, size: 18),
+                    label: const Text('收起键盘'))),
       TextField(
+        style: usesIosStyle(context) ? const TextStyle(fontSize: 17) : null,
         controller: query,
         focusNode: searchFocus,
         enabled: controller.ready && !controller.busy,
@@ -332,12 +446,28 @@ class _GalleryPageState extends State<GalleryPage> {
                   child: SizedBox.square(
                       dimension: 20,
                       child: CircularProgressIndicator(strokeWidth: 2)))
-              : IconButton(
-                  tooltip: '搜索',
-                  onPressed:
-                      controller.ready && !controller.busy ? submit : null,
-                  icon: const Icon(Icons.arrow_upward)),
-          filled: true,
+              : usesIosStyle(context)
+                  ? Padding(
+                      padding: const EdgeInsets.all(7),
+                      child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(34, 34),
+                          borderRadius: BorderRadius.circular(20),
+                          color: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          onPressed: controller.ready && !controller.busy
+                              ? submit
+                              : null,
+                          child: const Icon(Icons.arrow_upward, size: 19)))
+                  : IconButton(
+                      tooltip: '搜索',
+                      onPressed:
+                          controller.ready && !controller.busy ? submit : null,
+                      icon: const Icon(Icons.arrow_upward)),
+          filled: !usesIosStyle(context),
+          contentPadding: usesIosStyle(context)
+              ? const EdgeInsets.symmetric(vertical: 14)
+              : null,
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(22),
               borderSide: BorderSide.none),
@@ -350,16 +480,25 @@ class _GalleryPageState extends State<GalleryPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         // Skip the size controller entirely for reduced motion. A zero-duration
         // AnimatedSize can notify layout listeners while it is laying out.
-        child: MediaQuery.disableAnimationsOf(context)
-            ? controls
-            : AnimatedSize(
-                duration: _transitionDuration,
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.bottomCenter,
-                child: controls),
+        child: usesIosStyle(context)
+            ? IosGlassSurface(
+                child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: animatedControls(controls)))
+            : animatedControls(controls),
       ),
     );
   }
+
+  Widget animatedControls(Widget controls) =>
+      MediaQuery.disableAnimationsOf(context)
+          ? controls
+          : AnimatedSize(
+              duration: _transitionDuration,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: controls);
 }
 
 /// Keep each image request stable across score/selection/progress rebuilds.
@@ -445,12 +584,16 @@ class PhotoDetailPage extends StatelessWidget {
   final GalleryController controller;
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('图片详情'), actions: [
-          IconButton(
-              tooltip: '分享',
-              onPressed: () => controller.share([hit.photo.id]),
-              icon: const Icon(Icons.ios_share))
-        ]),
+        extendBodyBehindAppBar: usesIosStyle(context),
+        appBar: AdaptiveNavigationBar(
+            platform: Theme.of(context).platform,
+            title: '图片详情',
+            actions: [
+              IconButton(
+                  tooltip: '分享',
+                  onPressed: () => controller.share([hit.photo.id]),
+                  icon: const Icon(Icons.ios_share))
+            ]),
         body: Center(
             child: InteractiveViewer(
                 minScale: .5,
@@ -470,8 +613,15 @@ class ModelLoadingView extends StatelessWidget {
     final progress = controller.modelProgress;
     final isTransfer =
         controller.downloadingModel && progress?.stage == 'downloading';
-    final verifying =
-        controller.downloadingModel && progress?.stage == 'verifying';
+    final label = controller.downloadingModel
+        ? switch (progress?.stage) {
+            'probing' => '正在选择下载线路…',
+            'switching' => '正在切换下载线路…',
+            'downloading' => '正在下载搜索模型',
+            'verifying' => '正在校验模型…',
+            _ => '正在准备 AI Gallery…',
+          }
+        : '正在准备 AI Gallery…';
     return Center(
         child: Padding(
             padding: const EdgeInsets.all(28),
@@ -481,11 +631,7 @@ class ModelLoadingView extends StatelessWidget {
               else
                 const CircularProgressIndicator(),
               const SizedBox(height: 18),
-              Text(isTransfer
-                  ? '正在下载搜索模型'
-                  : verifying
-                      ? '正在校验模型…'
-                      : '正在准备 AI Gallery…'),
+              Text(label),
               if (isTransfer && progress != null)
                 Padding(
                     padding: const EdgeInsets.only(top: 10),

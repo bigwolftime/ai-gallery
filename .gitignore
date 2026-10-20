@@ -35,6 +35,11 @@ migrate_working_dir/
 /coverage/
 .ota-command.lock
 
+# Private store signing credentials and keys.
+/android/key.properties
+*.jks
+*.keystore
+
 # Model weights are downloaded by the app; keep only the JSON manifest in Git.
 *.litertlm
 *.litertlm.gz

@@ -1,3 +1,4 @@
+import 'ota_test.dart' show testOtaController;
 import 'dart:async';
 import 'package:ai_gallery/src/gallery_controller.dart';
 import 'package:ai_gallery/src/gallery_page.dart';
@@ -179,8 +180,9 @@ void main() {
     native.indexed.add('0');
     final controller = GalleryController(service: FakeService(native: native));
     addTearDown(controller.dispose);
-    await tester
-        .pumpWidget(MaterialApp(home: GalleryPage(controller: controller)));
+    await tester.pumpWidget(MaterialApp(
+        home: GalleryPage(
+            controller: controller, otaController: testOtaController())));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '月饼');
     await tester.testTextInput.receiveAction(TextInputAction.search);
@@ -200,9 +202,11 @@ void main() {
     await tester.longPress(find.byKey(const ValueKey('0')));
     // Wait for the selection action panel to finish its entrance animation.
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('1')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('分享'));
     await tester.pumpAndSettle();
-    expect(native.shared, ['0']);
+    expect(native.shared, ['0', '1']);
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(controller.selectionMode, isFalse);
@@ -235,6 +239,51 @@ void main() {
     expect((await native.analyzePhotos(['p'])).failed, 1);
     expect((await native.search('月饼')).single.score, .82);
   });
+  test('native share channel preserves every selected photo in order',
+      () async {
+    const channel = MethodChannel('ai_gallery/native');
+    List<dynamic>? forwarded;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'sharePhotos') {
+        forwarded = (call.arguments as Map)['photoIds'] as List<dynamic>;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await AIGalleryNative().sharePhotos(['first', 'second', 'third']);
+    expect(forwarded, ['first', 'second', 'third']);
+  });
+  test(
+      'share failures preserve selection, show readable errors and allow retry',
+      () async {
+    final native = FailingShareNative()..offered = false;
+    final controller = GalleryController(service: FakeService(native: native));
+    addTearDown(controller.dispose);
+    await controller.start();
+    controller.select('0');
+    controller.select('1');
+    await controller.share();
+    expect(controller.error, '第 2 张照片无法读取，请重试。');
+    expect(controller.sharing, isFalse);
+    expect(controller.selected, {'0', '1'});
+    native.failShare = false;
+    await controller.share();
+    expect(native.shared, ['0', '1']);
+    expect(controller.error, isNull);
+  });
+}
+
+class FailingShareNative extends FakeNative {
+  bool failShare = true;
+  @override
+  Future<void> sharePhotos(List<String> ids) async {
+    if (failShare) {
+      throw PlatformException(code: 'SHARE_ERROR', message: '第 2 张照片无法读取，请重试。');
+    }
+    await super.sharePhotos(ids);
+  }
 }
 
 class DownloadRequiredService extends FakeService {

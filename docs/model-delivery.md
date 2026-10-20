@@ -2,9 +2,15 @@
 
 ## 当前可用配置
 
-默认地址为 LiteRT Community 的 Hugging Face 文件：
+当前模型同时使用 LiteRT Community 的 Hugging Face 和已验证的七牛 CDN 地址：
 
 https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm/resolve/main/embeddinggemma-2-740m.litertlm
+
+https://img.zonheng.net/embeddinggemma-2-740m.litertlm
+
+当前内置 Hugging Face 清单的模型哈希保持不变，由 Dart 为这个已知哈希补充七牛镜像，允许通过 OTA 启用而无需修改安装包资源。未来其他模型可在清单中显式提供 `mirrors` 数组；旧清单仍兼容。
+
+下载前并行获取各源前 256 KiB，以含 DNS/TLS/重定向的实际耗时排序，每个探测总超时 5 秒。达到采样上限立即关闭连接，避免忽略 Range 的服务器传完模型；仍可能有少量网络预读。单源跳过测速，已验证的本地模型和完整下载的待校验文件也不测速。最快源失败后自动尝试备用源，正确的前缀继续断点续传；校验失败会删除无效内容，恢复下载混入坏前缀时允许在当前源从零重试一次。磁盘错误不通过重复下载重试。
 
 元数据在 `assets/models/model-manifest.json`。现在只把清单打进安装包，不打包约 485 MB 的模型。首次使用显示下载确认；下载失败/暂停后保留按 SHA-256 命名的 `.partial` 文件。校验通过后原子重命名为 `.litertlm`，后续启动可离线复用。
 
@@ -28,6 +34,7 @@ https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm/resolve/
   "name": "embeddinggemma-2-740m",
   "modelVersion": "embeddinggemma-2-256-v1",
   "url": "https://your-cdn.example/models/embeddinggemma2/v1/model.litertlm",
+  "mirrors": ["https://your-backup.example/models/embeddinggemma2/v1/model.litertlm"],
   "sha256": "e7a8a2204b91e0f96e92960e84a09a89212e1633dcb7575a9bf3378b4df77f4c",
   "size": 484622336,
   "dimensions": 256,
@@ -39,7 +46,7 @@ https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm/resolve/
 
 ## 发布清单
 
-最简单方式是修改内置 JSON 的 `url` 后打包。希望以后无需重装 App 就发布新模型时，可以托管远端 JSON 并在构建时配置固定清单地址：
+修改内置 JSON 的 `url` / `mirrors` 需要新基础包，因为它们是资源文件；当前已知模型的七牛兼容配置在 Dart 中。希望以后无需重装 App 就发布新模型时，可以托管远端 JSON 并在构建时配置固定清单地址：
 
 ```sh
 flutter build ios --no-codesign --dart-define=MODEL_MANIFEST_URL=https://your-cdn.example/models/manifest.json
@@ -57,4 +64,17 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home flutter
 - 模型不在 cache 中，系统清缓存不会移除模型；卸载 App 会删除模型和索引。
 - 完整大小与 SHA-256 校验是首次激活条件；已验证文件通过校验标记和大小检查复用。
 - 模型 JSON 已缓存，已下载模型的普通离线启动无需访问网络。
-- 本功能不包含 Flutter 代码 OTA；Shorebird 仍未接入。
+- 模型下载与已接入的 Shorebird 代码 OTA 独立；新增下载源不会改变相同模型的索引身份。
+
+## 七牛 CDN 配置核对（2026-10-20）
+
+`img.zonheng.net` 已绑定 `pictures` 源站，状态成功，使用场景为下载分发，覆盖全球，CNAME 已配置。HTTPS、强制 HTTPS、HTTP/2 和 Range 回源均已开启；现有全局缓存规则为 1 个月，适合当前不可变模型文件。模型 URL 实测返回 206，大小 484,622,336 字节，ETag `lkYR9Qt-bPE_n3JDKqJhTxmq2Rm6` 与本地相同；两个源的 256 KiB 采样内容均匹配同一模型前缀。
+
+本次仅查看线上配置。后续建议：
+
+- 保持 Range 回源和现有 HTTPS 设置；模型更新使用新文件名/版本路径，不覆盖旧文件名。
+- 缓存参数保留现状，同一域名还有图片，不能为模型全局忽略所有参数，否则会影响图片处理。
+- 在 CDN 的“告警配置”配置流量告警；在域名“安全防护 → 用量封顶”按试用预算设置上限。每个首次完整下载约 0.485 GB，预算还需包含图片、测速和重试。封顶影响整个域名，且周期性统计存在延迟。
+- 当前时间戳防盗链、Referer 防盗链和回源鉴权未启用。原生 App 不宜依赖 Referer 防盗链；开启时间戳鉴权前先接服务端生成短期签名 URL，不能在 App 内保存签名密钥，也不能把一次性签名 URL 写死。
+
+下载器测试覆盖并行选源、超时和暂停、跨源续传、坏内容回退、坏前缀从零恢复、忽略 Range 时提前断开连接、HTTPS 镜像校验和原模型索引兼容。共享下载流程适用于 iOS/Android。

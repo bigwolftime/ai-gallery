@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:ai_gallery_native/ai_gallery_native.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'native_service.dart';
 import 'models/model_manifest.dart';
 import 'search_window.dart';
@@ -206,6 +207,8 @@ class GalleryController extends ChangeNotifier {
             .toList();
     if (ordered.isEmpty) return;
     sharing = true;
+    error = null;
+    message = null;
     _emit();
     try {
       await service.sharePhotos(ordered);
@@ -230,7 +233,10 @@ class GalleryController extends ChangeNotifier {
     selectionMode = false;
   }
 
-  String _describe(Object failure) => failure.toString();
+  // Present the native message without exposing platform-channel internals.
+  String _describe(Object failure) => failure is PlatformException
+      ? failure.message ?? '操作失败，请重试。'
+      : failure.toString();
   void _emit() {
     if (!_disposed) notifyListeners();
   }

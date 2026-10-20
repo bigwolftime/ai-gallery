@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Independent releases retain opt-in APK installation and OTA support. -->
+    <application android:icon="@mipmap/ic_launcher_store" tools:replace="android:icon">
+        <meta-data android:name="ai_gallery.distribution_channel" android:value="${aiGalleryDistribution}" />
+    </application>
+</manifest>
