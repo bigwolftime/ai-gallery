@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../ui/ios_glass.dart';
+import '../ui/glass.dart';
 
 /// Legal information is bundled so reading it never requires a network request.
 class LegalPage extends StatefulWidget {
@@ -15,13 +15,19 @@ class _LegalPageState extends State<LegalPage> {
   late final Future<String> content = rootBundle.loadString(widget.asset);
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AdaptiveNavigationBar(
-          platform: Theme.of(context).platform, title: widget.title),
+      extendBodyBehindAppBar: true,
+      appBar: GlassNavigationBar(title: widget.title),
       body: FutureBuilder<String>(
           future: content,
           builder: (context, snapshot) => snapshot.hasData
               ? SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.fromLTRB(
+                      20,
+                      MediaQuery.paddingOf(context).top +
+                          GlassNavigationBar.height +
+                          20,
+                      20,
+                      MediaQuery.paddingOf(context).bottom + 20),
                   child: SelectableText(snapshot.data!,
                       style: Theme.of(context)
                           .textTheme

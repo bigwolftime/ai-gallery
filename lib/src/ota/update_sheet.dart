@@ -1,25 +1,18 @@
 import 'package:flutter/material.dart';
 import 'ota_controller.dart';
-import '../ui/ios_glass.dart';
+import '../ui/glass.dart';
 
 /// Fill the phone's available width, with a comfortable cap on larger screens.
 Future<void> showUpdateDialog(BuildContext context,
         {required OtaController controller}) =>
     showDialog<void>(
         context: context,
-        barrierColor:
-            Colors.black.withValues(alpha: usesIosStyle(context) ? .28 : .54),
+        barrierColor: Colors.black.withValues(alpha: .4),
         builder: (context) => Dialog(
               insetPadding:
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               constraints: const BoxConstraints(maxWidth: 440),
-              backgroundColor:
-                  usesIosStyle(context) ? Colors.transparent : null,
-              elevation: usesIosStyle(context) ? 0 : null,
-              child: usesIosStyle(context)
-                  ? IosGlassSurface(
-                      radius: 30, child: UpdateSheet(controller: controller))
-                  : UpdateSheet(controller: controller),
+              child: UpdateSheet(controller: controller),
             ));
 
 class UpdateSheet extends StatelessWidget {
@@ -146,7 +139,7 @@ class UpdateSheet extends StatelessWidget {
                               '${(controller.packageProgress!.received / 1000000).toStringAsFixed(1)} / ${(controller.packageProgress!.total / 1000000).toStringAsFixed(1)} MB')),
                     const SizedBox(height: 24),
                     if (controller.phase == OtaPhase.packageAvailable)
-                      adaptivePrimaryAction(context,
+                      FilledButton(
                           onPressed: controller.fullRelease!.isApk
                               ? controller.downloadPackage
                               : controller.openFullRelease,
@@ -156,17 +149,17 @@ class UpdateSheet extends StatelessWidget {
                                   ? '下载新版 IPA'
                                   : '前往应用商店')),
                     if (controller.phase == OtaPhase.packageReady)
-                      adaptivePrimaryAction(context,
+                      FilledButton(
                           onPressed: controller.installPackage,
                           child: Text(controller.installPermissionRequired
                               ? '继续安装'
                               : '安装新版')),
                     if (controller.phase == OtaPhase.packageDownloading)
-                      adaptiveTextAction(context,
+                      AppTextAction(
                           label: '暂停下载',
                           onPressed: controller.pausePackageDownload),
                     if (controller.phase == OtaPhase.available)
-                      adaptivePrimaryAction(context,
+                      FilledButton(
                           onPressed: controller.download,
                           child: const Text('下载更新')),
                     if (!controller.busy &&
@@ -174,11 +167,10 @@ class UpdateSheet extends StatelessWidget {
                         controller.phase != OtaPhase.ready &&
                         controller.phase != OtaPhase.available &&
                         !controller.hasFullRelease)
-                      adaptivePrimaryAction(context,
+                      FilledButton(
                           onPressed: controller.check,
                           child: const Text('检查更新')),
-                    adaptiveTextAction(
-                      context,
+                    AppTextAction(
                       label: '关闭',
                       onPressed: () => Navigator.pop(context),
                     ),

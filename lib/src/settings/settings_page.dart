@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import '../gallery_controller.dart';
 import '../ota/ota_controller.dart';
 import '../ota/update_sheet.dart';
-import '../ui/ios_glass.dart';
+import '../ui/glass.dart';
 import 'app_settings.dart';
 import 'legal_page.dart';
 
@@ -66,17 +66,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = AppSettingsScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      extendBodyBehindAppBar: usesIosStyle(context),
-      appBar: AdaptiveNavigationBar(
-          platform: Theme.of(context).platform, title: '设置'),
+      extendBodyBehindAppBar: true,
+      appBar: const GlassNavigationBar(title: '设置'),
       body: ListView(
           padding: EdgeInsets.fromLTRB(
               20,
-              usesIosStyle(context)
-                  ? MediaQuery.paddingOf(context).top +
-                      AdaptiveNavigationBar.iosHeight +
-                      20
-                  : 20,
+              MediaQuery.paddingOf(context).top +
+                  GlassNavigationBar.height +
+                  20,
               20,
               MediaQuery.paddingOf(context).bottom + 20),
           children: [
@@ -84,7 +81,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             AnimatedBuilder(
               animation: widget.gallery,
-              builder: (context, _) => AdaptiveGlassCard(
+              builder: (context, _) => AppCard(
                 child: ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -107,55 +104,34 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 28),
             Text('主题', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 12),
-            AdaptiveGlassCard(
-              child: usesIosStyle(context)
-                  ? Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            CupertinoSlidingSegmentedControl<ThemeMode>(
-                                groupValue: settings.themeMode,
-                                children: const {
-                                  ThemeMode.system: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(horizontal: 4),
-                                      child: Text('跟随系统')),
-                                  ThemeMode.dark: Text('深色'),
-                                  ThemeMode.light: Text('浅色'),
-                                },
-                                onValueChanged: (mode) {
-                                  if (mode != null) {
-                                    unawaited(settings.setTheme(mode));
-                                  }
-                                }),
-                            const SizedBox(height: 12),
-                            Text('跟随系统会自动匹配手机的外观设置',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: scheme.onSurfaceVariant)),
-                          ]))
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: RadioGroup<ThemeMode>(
-                        groupValue: settings.themeMode,
-                        onChanged: (mode) {
-                          if (mode != null) unawaited(settings.setTheme(mode));
-                        },
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          RadioListTile<ThemeMode>(
-                              value: ThemeMode.system,
-                              title: const Text('跟随系统'),
-                              subtitle: const Text('自动使用手机的深色或浅色主题')),
-                          RadioListTile<ThemeMode>(
-                              value: ThemeMode.dark, title: const Text('深色')),
-                          RadioListTile<ThemeMode>(
-                              value: ThemeMode.light, title: const Text('浅色')),
-                        ]),
-                      ),
-                    ),
+            AppCard(
+              child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        CupertinoSlidingSegmentedControl<ThemeMode>(
+                            groupValue: settings.themeMode,
+                            children: const {
+                              ThemeMode.system: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 6),
+                                  child: Text('跟随系统')),
+                              ThemeMode.dark: Text('深色'),
+                              ThemeMode.light: Text('浅色'),
+                            },
+                            onValueChanged: (mode) {
+                              if (mode != null) {
+                                unawaited(settings.setTheme(mode));
+                              }
+                            }),
+                        const SizedBox(height: 12),
+                        Text('跟随系统会自动匹配手机的外观设置',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant)),
+                      ])),
             ),
             if (settings.error != null)
               Padding(
@@ -167,7 +143,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 12),
             AnimatedBuilder(
               animation: widget.ota,
-              builder: (context, _) => AdaptiveGlassCard(
+              builder: (context, _) => AppCard(
                 child: ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -195,7 +171,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 12),
-            AdaptiveGlassCard(
+            AppCard(
                 child: Column(children: [
               ListTile(
                 leading:

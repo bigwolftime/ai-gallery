@@ -38,12 +38,20 @@ final class PhotoLibraryService {
         return image.jpegData(compressionQuality: 0.88)
     }
 
-    func image(for asset: PHAsset, targetSize: CGSize, contentMode: PHImageContentMode, allowNetworkAccess: Bool) async -> UIImage? {
+    /// `onProgress` fires only while Photos downloads the original from iCloud.
+    func image(for asset: PHAsset, targetSize: CGSize, contentMode: PHImageContentMode, allowNetworkAccess: Bool,
+               onProgress: (@MainActor @Sendable (Double) -> Void)? = nil) async -> UIImage? {
         await withCheckedContinuation { continuation in
             let options = PHImageRequestOptions()
             options.deliveryMode = .highQualityFormat
             options.resizeMode = .fast
             options.isNetworkAccessAllowed = allowNetworkAccess
+            if let onProgress {
+                // Photos calls this on a background queue.
+                options.progressHandler = { progress, _, _, _ in
+                    Task { @MainActor in onProgress(progress) }
+                }
+            }
             var resumed = false
             imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: contentMode, options: options) { image, info in
                 guard !resumed else { return }

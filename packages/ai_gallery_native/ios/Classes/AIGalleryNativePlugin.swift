@@ -7,6 +7,7 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
     private let photoLibrary = PhotoLibraryService()
     private let model = EmbeddingModelService()
     private var progressSink: FlutterEventSink?
+    private let imageProgress = ImageProgressStream()
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let methods = FlutterMethodChannel(name: "ai_gallery/native", binaryMessenger: registrar.messenger())
@@ -14,6 +15,8 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
         let plugin = AIGalleryNativePlugin()
         registrar.addMethodCallDelegate(plugin, channel: methods)
         progress.setStreamHandler(plugin)
+        let imageProgress = FlutterEventChannel(name: "ai_gallery/image_progress", binaryMessenger: registrar.messenger())
+        imageProgress.setStreamHandler(plugin.imageProgress)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -65,17 +68,9 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
                     }
                     result(nil)
                 case "loadThumbnail", "loadImage":
-                    let fullSize = call.method == "loadImage"
-                    guard let args = call.arguments as? [String: Any],
-                          let id = args["id"] as? String, let asset = photoLibrary.asset(id: id),
-                          let image = await photoLibrary.image(
-                            for: asset, targetSize: CGSize(width: fullSize ? 2400 : 360, height: fullSize ? 2400 : 360),
-                            contentMode: fullSize ? .aspectFit : .aspectFill, allowNetworkAccess: fullSize),
-                          let data = image.jpegData(compressionQuality: 0.88) else {
-                        result(nil)
-                        return
-                    }
-                    result(FlutterStandardTypedData(bytes: data))
+                    let id = (call.arguments as? [String: Any])?["id"] as? String
+                    let data = await imageData(id: id, fullSize: call.method == "loadImage")
+                    result(data.map { FlutterStandardTypedData(bytes: $0) })
                 case "hasIndexedPhotos":
                     let ids = (call.arguments as? [String: Any])?["photoIds"] as? [String] ?? []
                     result(model.hasIndexedPhotos(ids))
@@ -115,6 +110,26 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
         }
     }
 
+    /// Full-size requests may download the original from iCloud; their progress
+    /// is streamed so the detail page can explain the wait.
+    private func imageData(id: String?, fullSize: Bool) async -> Data? {
+        guard let id, let asset = photoLibrary.asset(id: id) else { return nil }
+        let stream = imageProgress
+        var onProgress: (@MainActor @Sendable (Double) -> Void)?
+        if fullSize {
+            onProgress = { progress in stream.send(id: id, progress: progress) }
+        }
+        let side: CGFloat = fullSize ? 2400 : 360
+        guard let image = await photoLibrary.image(
+            for: asset, targetSize: CGSize(width: side, height: side),
+            contentMode: fullSize ? .aspectFit : .aspectFill, allowNetworkAccess: fullSize,
+            onProgress: onProgress) else { return nil }
+        // Encoding a 2400px JPEG is slow enough to stall the UI; keep it off the main actor.
+        return await Task.detached(priority: .userInitiated) { () -> Data? in
+            image.jpegData(compressionQuality: 0.88)
+        }.value
+    }
+
     private func presentShareSheet(items: [PhotoShareItem]) throws {
         guard !items.isEmpty, let root = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).filter({ $0.activationState == .foregroundActive }).flatMap({ $0.windows }).first(where: { $0.isKeyWindow })?.rootViewController else {
             throw PhotoShareError.missingPresenter
@@ -135,6 +150,26 @@ public final class AIGalleryNativePlugin: NSObject, FlutterPlugin, FlutterStream
 
     public func onCancel(withArguments arguments: Any?) -> FlutterError? {
         progressSink = nil
+        return nil
+    }
+}
+
+/// Streams iCloud download progress for full-size photos to the detail page.
+@MainActor
+final class ImageProgressStream: NSObject, FlutterStreamHandler {
+    private var sink: FlutterEventSink?
+
+    func send(id: String, progress: Double) {
+        sink?(["id": id, "progress": progress])
+    }
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        sink = events
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        sink = nil
         return nil
     }
 }

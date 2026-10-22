@@ -80,6 +80,33 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('suggestion search does not refocus the field after detail',
+      (tester) async {
+    final native = FakeNative()..offered = false;
+    native.indexed.add('0');
+    final controller = GalleryController(service: FakeService(native: native));
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.iOS),
+        home: GalleryPage(
+            controller: controller, otaController: testOtaController())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('猫咪'));
+    await tester.pumpAndSettle();
+    expect(native.searchCalls, 1);
+    await tester.tap(find.byKey(const ValueKey('0')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final input = tester.widget<TextField>(find.byType(TextField));
+    expect(input.focusNode!.hasFocus, isFalse);
+    expect(input.controller!.text, '猫咪');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('reduced motion removes tile and selection animation delays',
       (tester) async {
     final native = FakeNative()..offered = false;

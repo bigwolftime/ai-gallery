@@ -60,13 +60,34 @@ class AnalysisProgress {
   }
 }
 
+/// Download progress for a full-size photo the system is fetching remotely
+/// (an iCloud original on iOS). Local photos never emit it.
+class ImageLoadProgress {
+  const ImageLoadProgress({required this.id, required this.fraction});
+
+  final String id;
+  final double fraction;
+
+  factory ImageLoadProgress.fromMap(Map<Object?, Object?> map) =>
+      ImageLoadProgress(
+        id: map['id'] as String? ?? '',
+        fraction: ((map['progress'] as num?)?.toDouble() ?? 0).clamp(0, 1),
+      );
+}
+
 class AIGalleryNative {
-  AIGalleryNative({MethodChannel? methods, EventChannel? progress})
+  AIGalleryNative(
+      {MethodChannel? methods,
+      EventChannel? progress,
+      EventChannel? imageProgress})
       : _methods = methods ?? const MethodChannel('ai_gallery/native'),
-        _progress = progress ?? const EventChannel('ai_gallery/progress');
+        _progress = progress ?? const EventChannel('ai_gallery/progress'),
+        _imageProgress =
+            imageProgress ?? const EventChannel('ai_gallery/image_progress');
 
   final MethodChannel _methods;
   final EventChannel _progress;
+  final EventChannel _imageProgress;
 
   Stream<AnalysisProgress> get analysisProgress =>
       _progress.receiveBroadcastStream().map((event) =>
@@ -89,6 +110,14 @@ class AIGalleryNative {
   Future<Uint8List?> loadThumbnail(String id) async {
     return await _methods.invokeMethod<Uint8List>('loadThumbnail', {'id': id});
   }
+
+  /// Older native builds and Android have no such channel; they simply emit
+  /// nothing, so a Dart patch stays compatible with every installed base.
+  Stream<ImageLoadProgress> get imageLoadProgress => _imageProgress
+      .receiveBroadcastStream()
+      .map((event) =>
+          ImageLoadProgress.fromMap(Map<Object?, Object?>.from(event as Map)))
+      .handleError((Object _) {});
 
   Future<Uint8List?> loadImage(String id) =>
       _methods.invokeMethod<Uint8List>('loadImage', {'id': id});
